@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">nuasalibrary</string>
+    <string name="title_activity_main">nuasalibrary</string>
+    <string name="package_name">com.charles.nuasalibrary</string>
+    <string name="custom_url_scheme">com.charles.nuasalibrary</string>
+</resources>
