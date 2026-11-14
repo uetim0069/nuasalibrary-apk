@@ -17,10 +17,37 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      - name: Check signing secrets
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KP: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KS" ] || [ -z "$KP" ]; then
+            echo "::error::Signing secrets are missing. Add ANDROID_KEYSTORE_BASE64 and ANDROID_KEY_PASSWORD in Settings > Secrets and variables > Actions."
+            exit 1
+          fi
       - run: npm ci
       - run: npx cap sync android
-      - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
-      - run: cp android/app/build/outputs/apk/debug/app-debug.apk NUASA-Library.apk
+      - name: Generate NUASA icons and splash screen
+        run: npx --yes @capacitor/assets@3 generate --android
+      - name: Set app name and version
+        run: |
+          sed -i 's|<string name="app_name">[^<]*</string>|<string name="app_name">NUASA Library</string>|; s|<string name="title_activity_main">[^<]*</string>|<string name="title_activity_main">NUASA Library</string>|' android/app/src/main/res/values/strings.xml
+          sed -i "s/versionCode [0-9][0-9]*/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
+      - name: Build release
+        run: cd android && chmod +x gradlew && ./gradlew assembleRelease
+      - name: Sign APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > nuasa-release.jks
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          UNSIGNED=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$BT/zipalign" -f -p 4 "$UNSIGNED" aligned.apk
+          "$BT/apksigner" sign --ks nuasa-release.jks --ks-key-alias nuasa --ks-pass env:KEY_PASS --key-pass env:KEY_PASS --out NUASA-Library.apk aligned.apk
+          "$BT/apksigner" verify --print-certs NUASA-Library.apk
+          rm -f nuasa-release.jks
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
